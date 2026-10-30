@@ -59,6 +59,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #lbl { background: none; border: 0; padding: 4px 0; letter-spacing: inherit; text-transform: inherit; color: var(--ink); }
 .stage { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; align-items: center; gap: 18px; padding-block: 6px 18px; scrollbar-width: none; }
 .stage::-webkit-scrollbar { display: none; }
+.stage > * { flex-shrink: 0; }
 #face { width: min(40vw, 170px); height: auto; flex: none; filter: drop-shadow(0 0 34px rgba(163,25,27,.2)); animation: flick 9s infinite steps(1); }
 #face .skin { fill: url(#skin); }
 #face .dark { fill: #0c0b0a; }
