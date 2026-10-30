@@ -458,18 +458,50 @@ function dripsBreath() {
     n.connect(bp).connect(g).connect(master); n.start(t); n.stop(t + 2.6);
   }
 }
+/* «С днём рождения» в тёмной аранжировке: до минор, струнное остинато, удары, в конце — мажор */
 function melody() {
   if (!ac) return;
-  const N = [[67,.45],[67,.15],[69,.6],[67,.6],[72,.6],[71,1.2],[67,.45],[67,.15],[69,.6],[67,.6],[74,.6],[72,1.2],
-             [67,.45],[67,.15],[79,.6],[76,.6],[72,.6],[71,.6],[69,1.2],[77,.45],[77,.15],[76,.6],[72,.6],[74,.6],[72,1.8]];
-  let t = ac.currentTime + .4;
+  const beat = .52, t0 = ac.currentTime + .3;
+  const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+  const tone = (type, f, t, dur, peak, lpf, detune) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = f; if (detune) o.detune.value = detune;
+    if (lpf) { const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = lpf; o.connect(lp).connect(g); } else o.connect(g);
+    g.connect(master); env(g, t, .012, peak, Math.max(0, dur - .08), .14);
+    o.start(t); o.stop(t + dur + .3);
+  };
+  const boom = (t, big) => {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.setValueAtTime(big ? 70 : 60, t); o.frequency.exponentialRampToValueAtTime(32, t + .5);
+    env(g, t, .005, big ? .55 : .35, 0, big ? 1.4 : .6); o.connect(g).connect(master); o.start(t); o.stop(t + 1.6);
+    const n = noise(), lp = ac.createBiquadFilter(), ng = ac.createGain();
+    lp.type = 'lowpass'; lp.frequency.value = 700; env(ng, t, .002, big ? .3 : .18, 0, .25);
+    n.connect(lp).connect(ng).connect(master); n.start(t); n.stop(t + .4);
+  };
+  const CH = { Cm: [48, 51, 55], G: [43, 47, 50], G7: [43, 47, 53], Fm: [41, 44, 48] };
+  const bar = (name, t, vol) => {
+    const [r, th, fi] = CH[name];
+    [r + 12, fi + 12, r + 24, th + 24, r + 24, fi + 12].forEach((m, i) =>
+      tone('sawtooth', hz(m), t + i * beat / 2, beat * .36, .045 * vol, 1700, i % 2 ? 7 : -7));
+    tone('sawtooth', hz(r - 12), t, beat * 3, .09 * vol, 320);
+  };
+  bar('Cm', t0, .5); bar('Cm', t0 + 3 * beat, .85); boom(t0 + 3 * beat);
+  const mel = t0 + 5 * beat;
+  ['Cm', 'G', 'G', 'Cm', 'Cm', 'Fm', 'G7'].forEach((c, k) => {
+    const t = mel + beat + k * 3 * beat;
+    bar(c, t, 1); if (k % 2 === 0) boom(t);
+  });
+  const end = mel + beat + 7 * 3 * beat;
+  [48, 52, 55, 60, 64].forEach(m => tone('sawtooth', hz(m), end, beat * 5, .05, 1400));
+  [84, 88, 91].forEach(m => tone('sine', hz(m), end + .05, beat * 4, .025));
+  boom(end, true);
+  const N = [[67,.75],[67,.25],[68,1],[67,1],[72,1],[71,2],[67,.75],[67,.25],[68,1],[67,1],[74,1],[72,2],
+             [67,.75],[67,.25],[79,1],[75,1],[72,1],[71,1],[68,1],[77,.75],[77,.25],[75,1],[72,1],[74,1],[72,3]];
+  let t = mel;
   for (const [m, d] of N) {
-    const f = 440 * Math.pow(2, (m - 69) / 12), dur = d * 1.15;
-    [['triangle', 1, .22], ['sine', 2, .05]].forEach(([type, mul, peak]) => {
-      const o = ac.createOscillator(), g = ac.createGain();
-      o.type = type; o.frequency.value = f * mul; env(g, t, .02, peak, dur * .5, dur * .6);
-      o.connect(g).connect(master); o.start(t); o.stop(t + dur * 1.2 + .1);
-    });
+    const dur = d * beat;
+    tone('triangle', hz(m), t, dur * .95, .2);
+    tone('sine', hz(m) * 2, t, dur * .6, .04, 0, 9);
     t += dur;
   }
 }
