@@ -355,6 +355,7 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 
 /* ===== Звук (заглушки, синтез) ===== */
 let ac = null, master = null, noiseBuf = null, drone = null;
+const DRONE = .05;
 function initAudio() {
   if (ac) { if (ac.resume) ac.resume(); return; }
   const AC = window.AudioContext || window.webkitAudioContext;
@@ -397,15 +398,15 @@ function startDrone() {
   if (!ac || drone) return;
   const g = ac.createGain(); g.gain.value = .0001; g.connect(master);
   const o1 = ac.createOscillator(), o2 = ac.createOscillator(), og = ac.createGain();
-  o1.frequency.value = 49; o2.frequency.value = 51.7; og.gain.value = .5;
+  o1.frequency.value = 55; o2.frequency.value = 82.5; og.gain.value = .35;
   o1.connect(og); o2.connect(og); og.connect(g);
   const n = noise(), lp = ac.createBiquadFilter(), ng = ac.createGain();
-  lp.type = 'lowpass'; lp.frequency.value = 260; ng.gain.value = .35;
+  lp.type = 'lowpass'; lp.frequency.value = 180; ng.gain.value = .12;
   n.connect(lp).connect(ng).connect(g);
   const lfo = ac.createOscillator(), lg = ac.createGain();
-  lfo.frequency.value = .07; lg.gain.value = .2; lfo.connect(lg).connect(ng.gain);
+  lfo.frequency.value = .05; lg.gain.value = .06; lfo.connect(lg).connect(ng.gain);
   [o1, o2, n, lfo].forEach(x => x.start());
-  g.gain.exponentialRampToValueAtTime(.18, ac.currentTime + 3);
+  g.gain.exponentialRampToValueAtTime(DRONE, ac.currentTime + 3);
   drone = { g, src: [o1, o2, n, lfo] };
 }
 function droneTo(v, sec) {
@@ -667,12 +668,12 @@ async function stRescue(id) {
   panel.hidden = false;
   const slot = $('#photoSlot');
   const next = el('button', 'btn', d.live ? 'Я вернулась' : 'Дальше'); next.type = 'button';
-  next.onclick = () => { droneTo(.18, 1.5); go(d.live ? 'riddle' : 'call', d.live ? L + 1 : L); };
+  next.onclick = () => { droneTo(DRONE, 1.5); go(d.live ? 'riddle' : 'call', d.live ? L + 1 : L); };
   if (d.live) {
     panel.append(el('p', 'live', 'Когда обнимешь — нажми.'), next);
     return;
   }
-  droneTo(.03, .8);
+  droneTo(.008, .8);
   next.disabled = true;
   if (d.video) {
     const v = el('video', 'real'); v.src = d.video; v.controls = true; v.playsInline = true; v.setAttribute('playsinline', '');
