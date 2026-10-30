@@ -337,7 +337,8 @@ const WRONG_WORD = ['Это не то, что он хотел тебе сказ�
 /* ===== Состояние ===== */
 const $ = s => document.querySelector(s);
 const KEY = 'saw-sashulya-v1';
-const TEST = location.hash === '#test';
+const TEST = location.hash === '#test' || /[?&]test\b/.test(location.search);
+addEventListener('hashchange', () => { if ((location.hash === '#test') !== TEST) location.reload(); });
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let S = load();
 let started = false, voiceOn = true, fast = false;
