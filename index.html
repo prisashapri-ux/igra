@@ -663,8 +663,9 @@ async function stRescue(id) {
   const lines = d.live
     ? [`${d.who} на свободе.`, `Иди ${d.live}. Тебя ждут.`, 'И возвращайся… игра не закончена.']
     : [`${d.who} на свободе.`, 'Посмотри. Это для тебя.'];
-  if (!(await say(lines, id))) return;
+  if (!(await say(lines, id, true))) return;
   panel.hidden = false;
+  const slot = $('#photoSlot');
   const next = el('button', 'btn', d.live ? 'Я вернулась' : 'Дальше'); next.type = 'button';
   next.onclick = () => { droneTo(.18, 1.5); go(d.live ? 'riddle' : 'call', d.live ? L + 1 : L); };
   if (d.live) {
@@ -677,13 +678,13 @@ async function stRescue(id) {
     const v = el('video', 'real'); v.src = d.video; v.controls = true; v.playsInline = true; v.setAttribute('playsinline', '');
     v.onended = () => { next.disabled = false; };
     setTimeout(() => { next.disabled = false; }, 6000);
-    panel.append(v, next);
+    slot.appendChild(v); slot.hidden = false; panel.append(next); stage.scrollTop = 0;
     v.play().catch(() => {});
   } else {
     const box = el('div', 'vid');
     box.append(el('b', null, 'Видео · ' + d.who), el('span', null, 'Здесь будет поздравление'));
     const pr = el('div', 'prog'); pr.appendChild(el('i')); box.appendChild(pr);
-    panel.append(box, next);
+    slot.appendChild(box); slot.hidden = false; panel.append(next); stage.scrollTop = 0;
     setTimeout(() => { next.disabled = false; }, fast ? 200 : 4000);
   }
 }
