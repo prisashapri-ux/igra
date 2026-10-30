@@ -1,6 +1,13 @@
 <meta charset="utf-8">
 <title>Игра для Сашули</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Игра">
+<meta name="theme-color" content="#0c0b0a">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -53,7 +60,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #s-wake.grind .call, #s-wake.grind .sub { opacity: 0; transition: opacity 1.2s; }
 
 /* play */
-.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px 8px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); font-variant-numeric: tabular-nums; }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: max(14px, env(safe-area-inset-top, 0px)) 8px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); font-variant-numeric: tabular-nums; }
 .bar .rec { display: inline-flex; align-items: center; gap: 7px; color: var(--blood-hi); }
 .bar .rec i { width: 8px; height: 8px; border-radius: 50%; background: var(--blood-hi); animation: blink 1.2s infinite steps(1); }
 #lbl { background: none; border: 0; padding: 4px 0; letter-spacing: inherit; text-transform: inherit; color: var(--ink); }
@@ -96,7 +103,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .btn:disabled { background: #3a2a29; color: #c2b9ab; }
 .ghost { border: 1px solid var(--line); background: transparent; padding: 10px 14px; font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
 .ghost:active { color: var(--ink); border-color: var(--dim); }
-.foot { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; padding-block: 8px 14px; min-height: 58px; }
+.foot { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; padding-block: 8px max(14px, env(safe-area-inset-bottom, 0px)); min-height: 58px; }
 
 .polaroid { margin: 0; background: var(--paper); padding: 10px 10px 12px; width: min(72vw, 260px); transform: rotate(2deg); box-shadow: 0 10px 30px rgba(0,0,0,.6); position: relative; }
 .polaroid::before { content: ""; position: absolute; top: -10px; left: 50%; width: 70px; height: 20px; transform: translateX(-50%) rotate(-3deg); background: rgba(230,223,209,.55); }
@@ -782,6 +789,7 @@ let song = null;
 function boot() {
   if (started) return; started = true;
   initAudio(); unlockTTS(); keepAwake();
+  try { const de = document.documentElement, rf = de.requestFullscreen || de.webkitRequestFullscreen; if (rf && !document.fullscreenElement) { const r = rf.call(de); if (r && r.catch) r.catch(() => {}); } } catch (e) {}
   if (CFG.finalSong && ac) fetch(CFG.finalSong).then(r => r.arrayBuffer()).then(b => new Promise((ok, no) => ac.decodeAudioData(b, ok, no))).then(b => { song = b; }).catch(() => {});
 }
 wake.addEventListener('click', async () => {
