@@ -214,6 +214,7 @@ video.real { width: min(72vw, 280px); max-height: 52vh; max-width: 100%; backgro
 /* ===== Сценарий. Здесь меняются тексты, коды, фото и видео. ===== */
 const CFG = {
   word: 'ЛЮБЛЮТЕБЯ',
+  finalSong: null, // например 'song.mp3' — файл рядом с index.html; пока null, играет синтезированная мелодия
   intro: [
     'Здравствуй, Сашуля…',
     'Ты меня не знаешь. Но мы уже встречались.',
@@ -738,7 +739,8 @@ async function finale() {
   S.stage = 'final'; save();
   play.hidden = true; wake.hidden = true; fin.hidden = false; fin.classList.remove('lit');
   await wait(fast ? 300 : 2600);
-  fin.classList.add('lit'); melody(); confetti();
+  fin.classList.add('lit'); confetti();
+  if (song) { const s = ac.createBufferSource(); s.buffer = song; s.connect(master); s.start(); } else melody();
 }
 
 function confetti() {
@@ -776,9 +778,11 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 /* ===== Старт ===== */
 if (S && S.stage !== 'intro') $('#wakeSub').textContent = 'игра продолжится с того же места';
+let song = null;
 function boot() {
   if (started) return; started = true;
   initAudio(); unlockTTS(); keepAwake();
+  if (CFG.finalSong && ac) fetch(CFG.finalSong).then(r => r.arrayBuffer()).then(b => new Promise((ok, no) => ac.decodeAudioData(b, ok, no))).then(b => { song = b; }).catch(() => {});
 }
 wake.addEventListener('click', async () => {
   if (started) return;
