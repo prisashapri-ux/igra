@@ -185,6 +185,7 @@ video.real { width: min(72vw, 280px); max-height: 52vh; max-width: 100%; backgro
       <path class="bl" d="M100 207 L70 193 L70 221 Z M100 207 L130 193 L130 221 Z"/>
       <circle class="bl-hi" cx="100" cy="207" r="5.5"/>
     </svg>
+    <div id="photoSlot" hidden></div>
     <div id="subs" aria-live="polite"></div>
     <div class="panel" id="panel" hidden></div>
   </div>
@@ -529,7 +530,7 @@ function spiral(cx, cy) {
 $('#cheekL').setAttribute('d', spiral(60, 138));
 $('#cheekR').setAttribute('d', spiral(140, 138));
 
-async function say(lines, id) {
+async function say(lines, id, noScroll) {
   skipping = false; subs.innerHTML = ''; btnSkip.hidden = false;
   await interruptible(fast ? 0 : 160);
   for (const line of lines) {
@@ -537,7 +538,7 @@ async function say(lines, id) {
     const p = el('p', null, line); subs.appendChild(p);
     for (const c of subs.children) c.classList.toggle('past', c !== p);
     if (!skipping) {
-      p.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+      if (!noScroll) p.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
       face.classList.add('talk');
       await speak(line);
       face.classList.remove('talk');
@@ -560,6 +561,7 @@ function render() {
   run++; const id = run;
   skipping = false; hush(); releaseWaiters();
   panel.innerHTML = ''; panel.hidden = true; subs.innerHTML = '';
+  const slot = $('#photoSlot'); slot.innerHTML = ''; slot.hidden = true;
   btnRepeat.hidden = true; btnHint.hidden = true; btnSkip.hidden = true;
   face.classList.remove('talk'); stage.scrollTop = 0;
   if (S.stage === 'final') return finale();
@@ -642,17 +644,17 @@ function cells(groups, isWord, id) {
 async function stStory(id) {
   const L = S.level, d = lv(L);
   setLabel(`Ключ ${L} / 9 · найден`);
-  panel.hidden = false;
+  const slot = $('#photoSlot'); slot.hidden = false;
   const f = el('figure', 'polaroid'), ph = el('div', 'ph');
   if (d.photo) { const img = el('img'); img.src = d.photo; img.alt = d.who; ph.appendChild(img); }
   else ph.textContent = `Фото № ${L}\n${d.who}`;
   f.append(ph, el('figcaption', null, d.who));
-  panel.appendChild(f);
+  slot.appendChild(f);
   const lines = d.story ? d.story.slice() : ['Ты нашла фотографию, Сашуля…', 'Помнишь этот день?', `Здесь будет история этого фото: ${d.who}.`];
   if (L === 1) lines.push('Храни эти фотографии, Сашуля. Каждую. Они ещё понадобятся.');
-  if (!(await say(lines, id))) return;
+  if (!(await say(lines, id, true))) return;
   const b = el('button', 'btn', 'Дальше'); b.type = 'button'; b.onclick = () => go('rescue', L);
-  panel.appendChild(b);
+  panel.hidden = false; panel.appendChild(b);
 }
 
 async function stRescue(id) {
