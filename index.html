@@ -130,6 +130,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .tv-knobs i { width: 13px; height: 13px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #75685a, #221d18); }
 .tv-knobs b { position: absolute; right: 52px; bottom: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--blood-hi); box-shadow: 0 0 6px var(--blood-hi); }
 .tv video.real { display: block; width: 100%; max-height: 46vh; }
+.tvplay { position: absolute; inset: 0; z-index: 2; border: 0; background: rgba(0,0,0,.55); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; font-family: var(--mono); font-size: 11px; letter-spacing: .18em; text-transform: uppercase; }
+.tvplay[hidden] { display: none; }
+.tvplay i { width: 74px; height: 74px; border-radius: 50%; border: 2px solid var(--blood-hi); box-shadow: 0 0 18px rgba(200,30,30,.5); display: flex; align-items: center; justify-content: center; font-style: normal; font-size: 30px; padding-left: 6px; color: var(--blood-hi); }
 .vid { width: 100%; aspect-ratio: 9 / 16; max-height: 46vh; max-width: 100%; background: #000; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 14px; }
 .vid b { font-family: var(--mono); font-weight: 500; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--blood-hi); }
 .vid span { font-family: var(--display); font-style: italic; font-size: 1.15rem; color: var(--ink); }
@@ -878,8 +881,16 @@ async function stRescue(id) {
     const v = el('video', 'real'); v.src = d.video; v.controls = true; v.playsInline = true; v.setAttribute('playsinline', '');
     v.onended = () => { next.disabled = false; };
     setTimeout(() => { next.disabled = false; }, 6000);
-    scr.appendChild(v); slot.appendChild(tv); slot.hidden = false; panel.append(next); stage.scrollTop = 0;
-    v.play().catch(() => {});
+    /* если браузер не дал запустить само (iOS, ВК, автозапуск со звуком) — большая ▶; если файл не загрузился — повтор */
+    const tap = el('button', 'tvplay'); tap.type = 'button'; tap.hidden = true;
+    const ask = (txt, ico) => { tap.innerHTML = ''; tap.append(el('i', null, ico), el('span', null, txt)); tap.hidden = false; };
+    const fail = () => ask('Видео не загрузилось · нажми ещё раз', '↻');
+    const start = () => { tap.hidden = true; v.play().catch(() => v.error ? fail() : ask('Нажми, чтобы смотреть', '▶')); };
+    tap.onclick = () => { if (v.error) v.load(); start(); };
+    v.onplaying = () => { tap.hidden = true; };
+    v.onerror = fail;
+    scr.append(v, tap); slot.appendChild(tv); slot.hidden = false; panel.append(next); stage.scrollTop = 0;
+    start();
   } else {
     const box = el('div', 'vid');
     box.append(el('b', null, 'Видео · ' + d.who), el('span', null, 'Здесь будет поздравление'));
