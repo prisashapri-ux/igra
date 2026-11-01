@@ -612,7 +612,7 @@ function melody() {
   }
 }
 
-/* ===== Голос (заглушка: синтез речи браузера) ===== */
+/* ===== Голос: записи Билли из voice/, запасной — синтез речи браузера ===== */
 const hasTTS = 'speechSynthesis' in window;
 let voice = null;
 function pickVoice() {
@@ -636,11 +636,52 @@ function interruptible(ms) {
   });
 }
 function releaseWaiters() { [...waiters].forEach(w => w()); }
-function hush() { try { if (hasTTS) speechSynthesis.cancel(); } catch (e) {} }
-function speak(text) {
+function hush() {
+  try { if (hasTTS) speechSynthesis.cancel(); } catch (e) {}
+  if (voiceSrc) { try { voiceSrc.stop(); } catch (e) {} voiceSrc = null; }
+}
+
+/* Записанный голос: голос/build.py озвучивает реплики в voice/<ключ>.mp3, ключ — FNV-1a от текста */
+const voiceRaw = {}, voiceBuf = {};
+let voiceSrc = null, voiceAn = null, voiceWave = null;
+function voiceKey(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193) >>> 0;
+  return h.toString(16).padStart(8, '0');
+}
+function voiceDecode(k) {
+  if (!voiceBuf[k]) voiceBuf[k] = new Promise((ok, no) => ac.decodeAudioData(voiceRaw[k].slice(0), ok, no)).catch(() => null);
+  return voiceBuf[k];
+}
+async function speakRec(k) {
+  const buf = await voiceDecode(k);
+  if (!buf || skipping) return !!buf;
+  if (!voiceAn) {
+    voiceAn = ac.createAnalyser(); voiceAn.fftSize = 512; voiceWave = new Float32Array(voiceAn.fftSize);
+    voiceAn.connect(master);
+  }
+  await new Promise(res => {
+    let done = false;
+    const s = ac.createBufferSource(); s.buffer = buf; s.connect(voiceAn);
+    const fin = () => { if (done) return; done = true; waiters.delete(fin); if (voiceSrc === s) { try { s.stop(); } catch (e) {} voiceSrc = null; } res(); };
+    s.onended = fin; waiters.add(fin); voiceSrc = s; s.start();
+  });
+  return true;
+}
+/* громкость голоса прямо сейчас, 0…1 — по ней открывается челюсть */
+function voiceLevel() {
+  if (!voiceSrc || !voiceAn) return -1;
+  voiceAn.getFloatTimeDomainData(voiceWave);
+  let sum = 0; for (const v of voiceWave) sum += v * v;
+  return Math.min(1, Math.max(0, Math.sqrt(sum / voiceWave.length) * 6 - .12));
+}
+
+async function speak(text) {
   const est = Math.max(1400, text.length * 68);
-  if (skipping) return Promise.resolve();
+  if (skipping) return;
   if (fast) return interruptible(200);
+  const k = voiceKey(text);
+  if (voiceOn && ac && voiceRaw[k] && await speakRec(k)) return;
   if (!voiceOn || !hasTTS) return interruptible(est);
   return new Promise(res => {
     let done = false;
@@ -683,7 +724,9 @@ function drawFace(now) {
   requestAnimationFrame(drawFace);
   if (!faceImg.complete || !faceImg.naturalWidth || play.hidden) return;
   const talking = face.classList.contains('talk');
-  if (now > jawNext) {
+  const lvl = talking ? voiceLevel() : -1;
+  if (lvl >= 0) jawTarget = lvl;
+  else if (now > jawNext) {
     jawTarget = talking ? (Math.random() < .2 ? 0 : .35 + Math.random() * .65) : 0;
     jawNext = now + 70 + Math.random() * 90;
   }
@@ -1000,8 +1043,12 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 /* ===== Предзагрузка: пока Сашуля собирается, видео, фото и песня скачиваются в память целиком ===== */
 let ready = false, songData = null;
-function preload() {
+async function preload() {
   const items = [];
+  try {
+    const keys = await (await fetch('voice/index.json', { cache: 'no-cache' })).json();
+    keys.forEach(k => items.push({ url: `voice/${k}.mp3`, voice: k }));
+  } catch (e) { /* записей нет — Билли говорит голосом браузера */ }
   CFG.levels.forEach(d => {
     if (d.video) items.push({ url: d.video, set: u => { d.video = u; } });
     if (d.photo && !/^data:/.test(d.photo)) items.push({ url: d.photo, set: u => { d.photo = u; } });
@@ -1011,8 +1058,8 @@ function preload() {
   const bar = $('#loadBar'), txt = $('#loadTxt'), box = $('#load');
   let shown = 0, last = Date.now();
   const show = () => {
-    /* пока сервер не назвал размер файла, считаем его в 6 МБ */
-    const all = items.reduce((s, it) => s + (it.done ? it.got : it.total || Math.max(6e6, it.got * 1.3)), 0);
+    /* пока сервер не назвал размер файла, считаем реплику в 40 КБ, остальное в 6 МБ */
+    const all = items.reduce((s, it) => s + (it.done ? it.got : it.total || Math.max(it.voice ? 4e4 : 6e6, it.got * 1.3)), 0);
     const got = items.reduce((s, it) => s + it.got, 0);
     shown = Math.max(shown, items.length ? Math.min(1, got / all) : 1);
     const p = Math.floor(shown * 100);
@@ -1027,7 +1074,9 @@ function preload() {
       if (rd) for (;;) { const { done, value } = await rd.read(); if (done) break; parts.push(value); it.got += value.length; last = Date.now(); show(); }
       else { const b = await r.blob(); parts.push(b); it.got = b.size; }
       const blob = new Blob(parts, { type });
-      if (it.song) songData = await blob.arrayBuffer(); else it.set(URL.createObjectURL(blob));
+      if (it.song) songData = await blob.arrayBuffer();
+      else if (it.voice) voiceRaw[it.voice] = await blob.arrayBuffer();
+      else it.set(URL.createObjectURL(blob));
     } catch (e) { /* не скачалось — останется ссылка на сайт, догрузится по ходу */ }
     it.done = true; show();
   };
@@ -1054,7 +1103,10 @@ wake.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ')
 let song = null;
 function boot() {
   if (started) return; started = true;
+  /* iOS: звук и при беззвучном режиме (как у видео), иначе голос Билли молчит */
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
   initAudio(); unlockTTS(); keepAwake();
+  if (ac) Object.keys(voiceRaw).reduce((p, k) => p.then(() => voiceDecode(k)), Promise.resolve());
   try { const de = document.documentElement, rf = de.requestFullscreen || de.webkitRequestFullscreen; if (rf && !document.fullscreenElement) { const r = rf.call(de); if (r && r.catch) r.catch(() => {}); } } catch (e) {}
   if (CFG.finalSong && ac) (songData ? Promise.resolve(songData) : fetch(CFG.finalSong).then(r => r.arrayBuffer())).then(b => new Promise((ok, no) => ac.decodeAudioData(b, ok, no))).then(b => { song = b; }).catch(() => {});
 }
