@@ -627,6 +627,93 @@ function melody() {
   }
 }
 
+/* ===== Музыка ожидания: своя жуткая шкатулка, заранее отрендерена в бесшовную петлю =====
+   Саша первым нажатием включает её и несёт телефон наверх; Сашуля вторым нажатием начинает игру. */
+const MUSIC_BEAT = 60 / 66, MUSIC_LOOP = MUSIC_BEAT * 3 * 12; // вальс, 12 тактов
+let musicBuf = null, musicSrc = null, musicGain = null, armedAt = 0;
+function renderMusic() {
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!OAC) return Promise.resolve(null);
+  const sr = 44100, tail = 4, c = new OAC(2, Math.ceil((MUSIC_LOOP + tail) * sr), sr);
+  const hz = m => 440 * Math.pow(2, (m - 69) / 12), b = MUSIC_BEAT;
+  const out = c.createGain(); out.connect(c.destination);
+  /* комната: шумовой импульс с затуханием */
+  const ir = c.createBuffer(2, sr * 3.5, sr);
+  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3); }
+  const rev = c.createConvolver(); rev.buffer = ir;
+  const wet = c.createGain(); wet.gain.value = .5; rev.connect(wet).connect(out);
+  const bus = c.createGain(); bus.connect(out); bus.connect(rev);
+  /* высота плавает, как у старой заводной шкатулки */
+  const wob = c.createOscillator(), wobG = c.createGain(); wob.frequency.value = .23; wobG.gain.value = 11; wob.connect(wobG); wob.start(0);
+  const pluck = (m, t, v) => {
+    for (const [mul, amp, dec] of [[1, 1, 2.2], [2, .18, .5], [4.2, .07, .15]]) {
+      const o = c.createOscillator(), g = c.createGain();
+      o.frequency.value = hz(m) * mul; wobG.connect(o.detune);
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v * amp, t + .004); g.gain.exponentialRampToValueAtTime(.0001, t + dec);
+      o.connect(g).connect(bus); o.start(t); o.stop(t + dec + .05);
+    }
+  };
+  const pad = (m, t, dur) => {
+    const o = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
+    o.type = 'triangle'; o.frequency.value = hz(m); lp.type = 'lowpass'; lp.frequency.value = 380;
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.16, t + .9); g.gain.setValueAtTime(.16, t + dur - .6); g.gain.linearRampToValueAtTime(0, t + dur + .4);
+    o.connect(lp).connect(g).connect(bus); o.start(t); o.stop(t + dur + .5);
+  };
+  const thump = (t, v) => {
+    const o = c.createOscillator(), g = c.createGain();
+    o.frequency.setValueAtTime(58, t); o.frequency.exponentialRampToValueAtTime(34, t + .25);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + .35);
+    o.connect(g).connect(out); o.start(t); o.stop(t + .4);
+  };
+  const draft = (t, dur) => {
+    const n = c.createBuffer(1, Math.ceil(sr * dur), sr), d = n.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const s = c.createBufferSource(), bp = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = n; bp.type = 'bandpass'; bp.Q.value = 1.2;
+    bp.frequency.setValueAtTime(500, t); bp.frequency.linearRampToValueAtTime(1300, t + dur / 2); bp.frequency.linearRampToValueAtTime(600, t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.05, t + dur / 2); g.gain.linearRampToValueAtTime(0, t + dur);
+    s.connect(bp).connect(g).connect(rev); s.start(t);
+  };
+  const MEL = [[81, 0, 76], [84, 83, 81], [80, 0, 76], [83, 0, 0], [81, 0, 76], [84, 86, 88],
+               [89, 88, 87], [88, 0, 0], [86, 84, 83], [84, 83, 81], [80, 77, 76], [81, 0, 0]];
+  const BASS = [45, 45, 40, 40, 45, 41, 47, 40, 38, 45, 40, 45];
+  MEL.forEach((bar, k) => {
+    const t = k * 3 * b;
+    bar.forEach((m, i) => { if (m) pluck(m, t + i * b, .3); });
+    pluck(BASS[k] + 24, t, .14);
+    pad(BASS[k], t, 3 * b);
+    if (k % 2 === 0) { thump(t, .5); thump(t + .3, .3); }
+  });
+  draft(5 * 3 * b, 6); draft(10 * 3 * b, 5);
+  return c.startRendering().then(buf => {
+    /* хвост эха после конца петли переносим в её начало — стык не слышен */
+    const n = Math.round(MUSIC_LOOP * sr);
+    let peak = 0;
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+      const d = buf.getChannelData(ch);
+      for (let i = n; i < d.length; i++) d[i - n] += d[i];
+      for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(d[i]));
+    }
+    const k = peak ? .9 / peak : 1;
+    for (let ch = 0; ch < buf.numberOfChannels; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < n; i++) d[i] *= k; }
+    return buf;
+  });
+}
+async function startMusic() {
+  initAudio(); if (!ac) return;
+  const buf = await musicBuf; if (!buf || musicSrc) return;
+  const t = ac.currentTime;
+  musicGain = ac.createGain(); musicGain.gain.setValueAtTime(0, t); musicGain.gain.linearRampToValueAtTime(1, t + 2.5);
+  musicSrc = ac.createBufferSource(); musicSrc.buffer = buf; musicSrc.loop = true; musicSrc.loopEnd = MUSIC_LOOP;
+  musicSrc.connect(musicGain).connect(master); musicSrc.start(t);
+}
+function stopMusic(sec) {
+  if (!musicSrc) return;
+  const t = ac.currentTime, g = musicGain.gain;
+  g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0, t + sec);
+  musicSrc.stop(t + sec + .1); musicSrc = null;
+}
+
 /* ===== Голос: записи Билли из voice/, запасной — синтез речи браузера ===== */
 const hasTTS = 'speechSynthesis' in window;
 let voice = null;
@@ -1060,6 +1147,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 let ready = false, songData = null;
 async function preload() {
   const items = [];
+  musicBuf = renderMusic().catch(() => null);
   try {
     const keys = await (await fetch('voice/index.json', { cache: 'no-cache' })).json();
     keys.forEach(k => items.push({ url: `voice/${k}.mp3`, voice: k }));
@@ -1099,7 +1187,7 @@ async function preload() {
   /* если сеть встала на 20 с — не держим Сашулю, пускаем в игру */
   const stall = new Promise(ok => { const t = setInterval(() => { if (Date.now() - last > 20000) { clearInterval(t); ok(); } }, 1000); });
   show();
-  Promise.race([Promise.all(items.map(grab)), stall]).then(() => minWait).then(() => {
+  Promise.race([Promise.all([...items.map(grab), musicBuf]), stall]).then(() => minWait).then(() => {
     shown = 1; bar.style.transform = 'scaleX(1)';
     setTimeout(() => {
       ready = true; wake.classList.remove('loading'); wake.removeAttribute('aria-disabled');
@@ -1127,7 +1215,15 @@ function boot() {
 }
 wake.addEventListener('click', async () => {
   if (started || !ready) return;
-  boot();
+  /* новая игра: первое нажатие (Саша) только включает музыку, игру начинает следующее (Сашуля) */
+  if (!S && !armedAt) {
+    armedAt = Date.now();
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+    keepAwake(); startMusic();
+    return;
+  }
+  if (armedAt && Date.now() - armedAt < 1500) return; // случайное двойное нажатие
+  boot(); stopMusic(2);
   if (!S) {
     S = { stage: 'intro', level: 0, t0: Date.now() }; save();
     wake.classList.add('grind');
